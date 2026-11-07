@@ -1,5 +1,5 @@
 {
-  "name": "idm-clone",
+  "name": "downly",
   "version": "2.0.0",
   "description": "Internet Download Manager style app built with Electron",
   "main": "src/main.js",
