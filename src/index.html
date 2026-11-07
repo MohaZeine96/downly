@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>IDM Clone</title>
+<style>
+:root{--bg:#14171c;--panel:#1b1f26;--panel2:#242a33;--line:#2a303a;--text:#e6e9ef;--mut:#8b94a3;--acc:#3b9cff;--ok:#3ecf6e;--err:#ff5d5d;--warn:#f5a623;--sel:#223044}
+body[data-theme=light]{--bg:#f4f6f9;--panel:#fff;--panel2:#eef1f5;--line:#d9dee6;--text:#1c2430;--mut:#6a7585;--acc:#1b7fe0;--sel:#dbeafe}
+*{box-sizing:border-box}
+body{margin:0;height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:13px system-ui,Segoe UI,sans-serif;user-select:none;overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+.toolbar{display:flex;gap:2px;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.toolbar button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:62px;padding:5px 6px;background:none;border:1px solid transparent;border-radius:6px;cursor:pointer;font-size:12px}
+.toolbar button:hover{background:var(--panel2);border-color:var(--line)}
+.toolbar button span{font-size:17px}.toolbar .sp{flex:1}.toolbar .vr{width:1px;background:var(--line);margin:4px 4px}
+.main{flex:1;display:flex;min-height:0}
+aside{width:190px;background:var(--panel);border-right:1px solid var(--line);padding:6px;overflow:auto}
+aside h4{margin:10px 8px 4px;font-size:11px;text-transform:uppercase;color:var(--mut);letter-spacing:.06em}
+aside div.i{padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+aside div.i:hover{background:var(--panel2)}aside div.i.on{background:var(--sel);color:var(--acc)}
+aside b{color:var(--mut);font-weight:400;font-size:12px}aside .run{color:var(--ok);font-size:10px;margin-left:4px}
+.tw{flex:1;overflow:auto;position:relative}
+table{width:100%;border-collapse:collapse}
+th{position:sticky;top:0;z-index:1;background:var(--panel);text-align:left;padding:7px 10px;color:var(--mut);font-weight:500;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}
+th:hover{color:var(--text)}
+td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+tr.row:hover{background:var(--panel2)}tr.sel{background:var(--sel)!important}
+.bar{height:14px;background:var(--line);border-radius:7px;overflow:hidden;position:relative;min-width:110px}
+.bar i{display:block;height:100%;background:var(--acc);transition:width .3s}
+.bar em{position:absolute;inset:0;text-align:center;font-style:normal;font-size:10px;line-height:14px;color:#fff;mix-blend-mode:normal;text-shadow:0 0 2px #0008}
+.st-complete{color:var(--ok)}.st-error{color:var(--err)}.st-paused{color:var(--warn)}.st-downloading{color:var(--acc)}
+.bar.c i{background:var(--ok)}.bar.p i{background:var(--warn)}.bar.e i{background:var(--err)}
+.empty{padding:70px;text-align:center;color:var(--mut)}
+.bottom{height:150px;border-top:1px solid var(--line);background:var(--panel);display:flex}
+.details{flex:1;padding:10px 14px;overflow:auto;min-width:0}
+.details .k{color:var(--mut);display:inline-block;width:84px}
+.details div.l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.segs{display:flex;gap:2px;margin-top:8px;height:12px}
+.segs div{flex:1;background:var(--line);border-radius:3px;overflow:hidden}.segs i{display:block;height:100%;background:var(--ok)}
+#chartBox{width:300px;border-left:1px solid var(--line);padding:6px 10px;position:relative}
+#chartBox small{color:var(--mut);position:absolute;top:6px;left:12px}
+#chart{width:100%;height:100%}
+.status{padding:4px 12px;background:var(--panel);border-top:1px solid var(--line);color:var(--mut);display:flex;justify-content:space-between}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:20}
+.modal.on{display:flex}
+.box{width:520px;max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;user-select:auto}
+.box.w{width:760px}.box h3{margin:0 0 10px}
+.box label{display:block;margin:9px 0 3px;color:var(--mut)}
+.box label.ck{display:flex;align-items:center;gap:7px;color:var(--text);margin:6px 0}
+.box input[type=text],.box input[type=number],.box input[type=password],.box input[type=time],.box input:not([type]),.box textarea,.box select{width:100%;padding:7px 8px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.box textarea{height:84px;resize:vertical}
+.r2{display:flex;gap:8px;align-items:flex-end}.r2>*{flex:1}.r2>button{flex:0 0 auto}
+.btns{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.btn{padding:6px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);cursor:pointer}
+.btn:hover{border-color:var(--acc)}.btn.p{background:var(--acc);border-color:var(--acc);color:#fff}.btn.d{color:var(--err)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.tabs div{padding:7px 14px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent}
+.tabs div.on{color:var(--acc);border-color:var(--acc)}
+.pane{display:none}.pane.on{display:block}
+.hint{color:var(--mut);font-size:12px;margin-top:4px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.list{border:1px solid var(--line);border-radius:6px;max-height:210px;overflow:auto;background:var(--bg);margin-top:6px}
+.list div{padding:5px 8px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list div.sel{background:var(--sel)}.list div span{overflow:hidden;text-overflow:ellipsis}
+.probe-list{border:1px solid var(--line);border-radius:6px;max-height:130px;overflow:auto;margin-top:8px}
+.probe-row{display:flex;justify-content:space-between;gap:12px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.probe-row:last-child{border-bottom:0}.probe-row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.probe-row span:last-child{flex:0 0 auto;color:var(--mut)}
+.days{display:flex;gap:10px;flex-wrap:wrap}.days label{margin:0;display:flex;gap:4px;color:var(--text)}
+.siterow{display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:6px;margin-top:6px}
+#ctx{position:fixed;display:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px;z-index:30;min-width:200px;box-shadow:0 8px 24px #0006}
+#ctx div{padding:6px 12px;border-radius:5px;cursor:pointer}#ctx div:hover{background:var(--sel)}#ctx hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+#ctx .dis{opacity:.4;pointer-events:none}
+#toast{position:fixed;right:16px;bottom:44px;display:flex;flex-direction:column;gap:6px;z-index:40}
+#toast div{background:var(--panel2);border:1px solid var(--line);padding:8px 14px;border-radius:8px;box-shadow:0 4px 16px #0005}
+body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;border:2px dashed var(--acc);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--acc);background:#3b9cff18;z-index:50;pointer-events:none}
+</style>
+</head>
+<body data-theme="dark">
+<div class="toolbar">
+  <button id="bAdd" title="Add URL (Ctrl+N)"><span>➕</span>Add URL</button>
+  <button id="bVideo" title="Download a video-sharing site URL with yt-dlp"><span>🎥</span>Video URL</button>
+  <button id="bBatch"><span>🧩</span>Batch</button>
+  <button id="bGrab"><span>🕷️</span>Grabber</button>
+  <div class="vr"></div>
+  <button id="bResume"><span>▶️</span>Resume</button>
+  <button id="bPause"><span>⏸️</span>Pause</button>
+  <button id="bStopAll"><span>⏹️</span>Stop All</button>
+  <button id="bStartQ" title="Start the selected queue / all queued items"><span>🚀</span>Start Queue</button>
+  <button id="bScheduleDownload" title="Schedule selected downloads"><span>⏰</span>Schedule</button>
+  <div class="vr"></div>
+  <button id="bRemove"><span>🗑️</span>Remove</button>
+  <button id="bDelete"><span>❌</span>Delete File</button>
+  <button id="bProps"><span>ℹ️</span>Properties</button>
+  <div class="sp"></div>
+  <button id="bImport"><span>📥</span>Import</button>
+  <button id="bExport"><span>📤</span>Export</button>
+  <button id="bSched"><span>⏰</span>Scheduler</button>
+  <button id="bSet"><span>⚙️</span>Options</button>
+</div>
+<div class="main">
+  <aside id="side"></aside>
+  <div class="tw">
+    <table>
+      <thead><tr>
+        <th data-k="name">File name</th><th data-k="size">Size</th><th data-k="progress" style="width:150px">Progress</th>
+        <th data-k="speed">Speed</th><th data-k="eta">Time left</th><th data-k="status">Status</th><th data-k="queue">Queue</th><th data-k="added">Added</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="empty" id="empty">No downloads here yet.<br>Click “Add URL”, drop a link on this window, or copy a link to your clipboard.</div>
+  </div>
+</div>
+<div class="bottom">
+  <div class="details" id="det">Select a download to see details.</div>
+  <div id="chartBox"><small id="chartLbl">Total speed</small><canvas id="chart"></canvas></div>
+</div>
+<div class="status"><span id="sCount"></span><span id="sSpeed"></span></div>
+
+<!-- Add -->
+<div class="modal" id="mAdd"><div class="box">
+  <h3>Add download</h3>
+  <label>URL(s) — one per line</label><textarea id="aUrl" placeholder="https://example.com/file.zip"></textarea>
+  <label class="ck"><input id="aVideo" type="checkbox"> Use yt-dlp for YouTube and other supported video-sharing sites</label>
+  <label>Save to</label><div class="r2"><input id="aDir"><button class="btn" id="aBrowse">Browse</button></div>
+  <div class="grid">
+    <div><label>Connections</label><input id="aConns" type="number" min="1" max="32"></div>
+    <div><label>Queue</label><select id="aQueue"></select></div>
+    <div><label>Speed limit (KB/s, 0 = none)</label><input id="aLimit" type="number" min="0" value="0"></div>
+    <div><label>Comment</label><input id="aComment"></div>
+    <div><label>Referer</label><input id="aRef"></div>
+    <div><label>Cookie</label><input id="aCookie"></div>
+  </div>
+  <div class="probe-list" id="aProbeList" hidden></div>
+  <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn" id="aProbe">Check size</button><button class="btn" id="aLater" disabled>Download Later</button><button class="btn p" id="aOk" disabled>Start Download</button></div>
+</div></div>
+
+<!-- Batch -->
+<div class="modal" id="mBatch"><div class="box">
+  <h3>Batch download from pattern</h3>
+  <label>URL template</label><input id="bTpl" placeholder="https://example.com/photos/img[001-120].jpg">
+  <div class="hint">Use <b>[1-50]</b> or <b>[001-120]</b> for numbers (zero-padded when the start has leading zeros) and <b>[a-z]</b> for letters. Several tokens can be combined.</div>
+  <div class="hint" id="bInfo">0 URLs</div>
+  <label>Save to</label><div class="r2"><input id="bDir"><button class="btn" id="bBrowse">Browse</button></div>
+  <label>Queue</label><select id="bQueue"></select>
+  <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn" id="bLater">Download Later</button><button class="btn p" id="bOk">Start Download</button></div>
+</div></div>
+
+<!-- Grabber -->
+<div class="modal" id="mGrab"><div class="box w">
+  <h3>Site grabber</h3>
+  <div class="r2"><div><label>Start URL</label><input id="gUrl" placeholder="https://example.com/gallery/"></div>
+    <div style="max-width:120px"><label>Depth</label><select id="gDepth"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></div></div>
+  <label>File types</label>
+  <div class="days" id="gTypes">
+    <label><input type="checkbox" value="images" checked> Images</label><label><input type="checkbox" value="video"> Video</label>
+    <label><input type="checkbox" value="audio"> Audio</label><label><input type="checkbox" value="docs"> Documents</label>
+    <label><input type="checkbox" value="archives"> Archives</label><label><input type="checkbox" value="programs"> Programs</label>
+  </div>
+  <div class="r2"><div><label>Other extensions (e.g. psd, ttf)</label><input id="gCustom"></div>
+    <label class="ck" style="flex:0 0 auto"><input type="checkbox" id="gSame" checked> Stay on same site</label>
+    <button class="btn p" id="gGo">Explore</button><button class="btn" id="gStop" style="display:none">Stop</button></div>
+  <div class="hint" id="gInfo">Enter a page URL and click Explore.</div>
+  <div class="list" id="gList"></div>
+  <div class="r2" style="margin-top:8px"><label class="ck" style="flex:0 0 auto"><input type="checkbox" id="gAll" checked> Select all</label>
+    <div><select id="gQueue"></select></div></div>
+  <div class="btns"><button class="btn" data-close>Close</button><button class="btn p" id="gAdd">Download Selected</button></div>
+</div></div>
+
+<!-- Options -->
+<div class="modal" id="mSet"><div class="box w">
+  <h3>Options</h3>
+  <div class="tabs" id="sTabs"><div data-p="general" class="on">General</div><div data-p="conn">Connection</div><div data-p="cats">File types</div><div data-p="brow">Browser</div><div data-p="sites">Sites &amp; passwords</div></div>
+  <div class="pane on" data-p="general">
+    <label>Default download folder</label><div class="r2"><input id="sDir"><button class="btn" id="sBrowse">Browse</button></div>
+    <label class="ck"><input type="checkbox" id="sCats"> Save into category folders (Compressed, Documents, Music, Programs, Video, Pictures)</label>
+    <div class="grid">
+      <div><label>Connections per file</label><input id="sConns" type="number" min="1" max="32"></div>
+      <div><label>Max simultaneous downloads</label><input id="sMax" type="number" min="1" max="20"></div>
+      <div><label>If file already exists</label><select id="sConf"><option value="rename">Rename (file (1).ext)</option><option value="overwrite">Overwrite</option></select></div>
+      <div><label>Theme</label><select id="sTheme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+    </div>
+    <label>yt-dlp executable (optional; blank uses yt-dlp from PATH)</label>
+    <div class="r2"><input id="sYtDlp" placeholder="yt-dlp or full executable path"><button class="btn" id="sYtDlpBrowse">Browse</button></div>
+    <div class="hint">Supports sites handled by yt-dlp. Use only for content you have permission to download; DRM-protected content is not supported. Install yt-dlp separately.</div>
+    <label class="ck"><input type="checkbox" id="sNotify"> Show notification when a download completes</label>
+    <label class="ck"><input type="checkbox" id="sSound"> Play sound when a download completes</label>
+    <label class="ck"><input type="checkbox" id="sClip"> Monitor clipboard for download links</label>
+    <label class="ck"><input type="checkbox" id="sTray"> Close button minimizes to system tray</label>
+    <label class="ck"><input type="checkbox" id="sBoot"> Start with the operating system</label>
+    <label>Run command after each download (antivirus etc.) — <code>{file}</code> is replaced by the file path</label>
+    <input id="sPost" placeholder='e.g.  "C:\Program Files\AV\scan.exe" {file}'>
+  </div>
+  <div class="pane" data-p="conn">
+    <div class="grid">
+      <div><label>Global speed limit (KB/s, 0 = unlimited)</label><input id="sLim" type="number" min="0"></div>
+      <div><label>Connection timeout (seconds)</label><input id="sTime" type="number" min="5" max="120"></div>
+      <div><label>Retries per connection</label><input id="sRetry" type="number" min="0" max="50"></div>
+    </div>
+    <label class="ck" style="margin-top:14px"><input type="checkbox" id="pxOn"> Use HTTP proxy</label>
+    <div class="grid"><div><label>Host</label><input id="pxHost"></div><div><label>Port</label><input id="pxPort" type="number"></div>
+      <div><label>User (optional)</label><input id="pxUser"></div><div><label>Password</label><input id="pxPass" type="password"></div></div>
+  </div>
+  <div class="pane" data-p="cats">
+    <label>File types captured from the browser (extensions, space separated)</label><textarea id="sExts"></textarea>
+    <div class="hint">The browser extension reads this list from the app.</div>
+    <label>Category folders (blank = <i>default folder</i>/Category)</label><div class="grid" id="sCatDirs"></div>
+  </div>
+  <div class="pane" data-p="brow">
+    <div class="grid"><div><label>Integration port</label><input id="sPort" type="number" min="1024" max="65535"></div></div>
+    <label class="ck"><input type="checkbox" id="sExtDlg"> Show the “Add download” dialog for links sent from the browser</label>
+    <div class="r2" style="margin:12px 0"><button class="btn p" id="sExt">Open browser extension folder</button></div>
+    <div class="hint" id="sExtInfo"></div>
+    <div class="hint"><b>Install (Chrome / Edge / Brave / Opera):</b> open <code>chrome://extensions</code> → enable <i>Developer mode</i> → <i>Load unpacked</i> → select the extension folder. The extension captures downloads, adds a right-click “Download with IDM Clone”, and detects videos on web pages (a popup lists them).</div>
+  </div>
+  <div class="pane" data-p="sites">
+    <div class="hint">Credentials used automatically (HTTP Basic auth) for these hosts. Passwords are encrypted with the OS keychain when available.</div>
+    <div id="sSites"></div><button class="btn" id="sSiteAdd" style="margin-top:8px">+ Add site</button>
+  </div>
+  <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn p" id="sOk">Save</button></div>
+</div></div>
+
+<!-- Scheduler -->
+<div class="modal" id="mSched"><div class="box w">
+  <h3>Scheduler &amp; queues</h3>
+  <div class="grid" style="grid-template-columns:200px 1fr">
+    <div><div class="list" id="qList" style="max-height:300px"></div>
+      <div class="r2" style="margin-top:8px"><button class="btn" id="qNew">New queue</button><button class="btn d" id="qDel">Delete</button></div></div>
+    <div>
+      <label>Queue name</label><input id="qName">
+      <label class="ck"><input type="checkbox" id="qEn"> Enable schedule</label>
+      <div class="grid"><div><label>Start at</label><input id="qStart" type="time"></div><div><label>Stop at (optional)</label><input id="qStop" type="time"></div></div>
+      <label>Days</label><div class="days" id="qDays"></div>
+      <div class="grid"><div><label>Max simultaneous (0 = global)</label><input id="qMax" type="number" min="0" max="20"></div>
+        <div><label>When queue finishes</label><select id="qAct"><option value="none">Do nothing</option><option value="exit">Exit program</option><option value="sleep">Sleep</option><option value="hibernate">Hibernate</option><option value="shutdown">Shut down computer</option></select></div></div>
+      <div class="r2" style="margin-top:12px;justify-content:flex-start"><button class="btn" id="qRun">▶ Start now</button><button class="btn" id="qHalt">⏹ Stop now</button></div>
+      <div class="hint">Downloads added to a queue wait until it starts (manually or at the scheduled time). The Main queue runs immediately unless you schedule it.</div>
+    </div>
+  </div>
+  <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn p" id="qSave">Save</button></div>
+</div></div>
+
+<!-- Schedule selected downloads -->
+<div class="modal" id="mDownloadSchedule"><div class="box">
+  <h3>Schedule downloads</h3>
+  <div class="hint" id="scheduleCount"></div>
+  <label>Days to start</label>
+  <label class="ck"><input id="scheduleEveryDay" type="checkbox"> Every day</label>
+  <div class="days" id="scheduleDays"></div>
+  <label>Start at (local time)</label>
+  <input id="scheduleAt" type="time">
+  <label>End at (optional; pause downloads that are still running)</label>
+  <input id="scheduleEndAt" type="time">
+  <div class="btns">
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn" id="scheduleClear">Cancel scheduled start</button>
+    <button class="btn p" id="scheduleSave">Schedule</button>
+  </div>
+</div></div>
+
+<!-- Properties -->
+<div class="modal" id="mProps"><div class="box">
+  <h3>Download properties</h3>
+  <div class="hint" id="pInfo" style="user-select:text;margin-bottom:6px"></div>
+  <label>Address (URL) — change it to refresh an expired link</label><input id="pUrl">
+  <div class="grid">
+    <div><label>Referer</label><input id="pRef"></div><div><label>Cookie</label><input id="pCookie"></div>
+    <div><label>Connections</label><input id="pConns" type="number" min="1" max="32"></div><div><label>Speed limit (KB/s)</label><input id="pLimit" type="number" min="0"></div>
+    <div><label>Queue</label><select id="pQueue"></select></div><div><label>Comment</label><input id="pComment"></div>
+  </div>
+  <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn" id="pSave">Save</button><button class="btn p" id="pRefresh">Save &amp; Resume</button></div>
+</div></div>
+
+<!-- Power -->
+<div class="modal" id="mPower"><div class="box" style="width:400px">
+  <h3 id="pwTitle">Queue finished</h3>
+  <p id="pwText"></p>
+  <div class="btns"><button class="btn" id="pwCancel">Cancel</button><button class="btn p" id="pwNow">Do it now</button></div>
+</div></div>
+
+<div id="ctx"></div>
+<div id="toast"></div>
+<script src="renderer.js"></script>
+</body>
+</html>

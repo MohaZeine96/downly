@@ -1,0 +1,34 @@
+{
+  "name": "idm-clone",
+  "version": "2.0.0",
+  "description": "Internet Download Manager style app built with Electron",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.example.idmclone",
+    "productName": "IDM Clone",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      }
+    ],
+    "win": {
+      "icon": "src/icon.png"
+    },
+    "linux": {
+      "icon": "src/icon.png"
+    }
+  }
+}

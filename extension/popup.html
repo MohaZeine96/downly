@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+body{width:380px;margin:0;font:13px system-ui,sans-serif;background:#14171c;color:#e6e9ef}
+header{padding:10px 12px;background:#1b1f26;border-bottom:1px solid #2a303a;display:flex;justify-content:space-between;align-items:center}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#ff5d5d;margin-right:6px}.dot.on{background:#3ecf6e}
+#list{max-height:260px;overflow:auto}
+.it{padding:8px 12px;border-bottom:1px solid #2a303a;display:flex;gap:8px;align-items:center}
+.it .t{flex:1;min-width:0}.it .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .t small{color:#8b94a3}
+button{background:#3b9cff;color:#fff;border:0;border-radius:6px;padding:5px 10px;cursor:pointer}
+button.g{background:#242a33;color:#e6e9ef;border:1px solid #2a303a}
+.empty{padding:22px;text-align:center;color:#8b94a3}
+.opts{padding:10px 12px;border-top:1px solid #2a303a;background:#1b1f26}
+label{display:flex;align-items:center;gap:6px;margin:4px 0}
+input[type=number],textarea{width:100%;background:#14171c;border:1px solid #2a303a;color:inherit;border-radius:5px;padding:4px;box-sizing:border-box}
+textarea{height:52px}
+</style></head><body>
+<header><span><span class="dot" id="dot"></span><span id="st">Checking…</span></span><button class="g" id="all" style="display:none">Download all</button></header>
+<div id="list"></div>
+<div class="opts">
+  <label><input type="checkbox" id="enabled"> Capture browser downloads</label>
+  <label><input type="checkbox" id="sniff"> Detect videos &amp; audio on pages</label>
+  <label>Port <input type="number" id="port" style="width:80px"> Min size (MB) <input type="number" id="min" style="width:60px"></label>
+  <div>Captured extensions</div><textarea id="exts"></textarea>
+</div>
+<script src="popup.js"></script>
+</body></html>

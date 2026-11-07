@@ -1,0 +1,35 @@
+const { contextBridge, ipcRenderer } = require('electron');
+const inv = (c, ...a) => ipcRenderer.invoke(c, ...a);
+const on = (ch, cb) => ipcRenderer.on(ch, (_, d) => cb(d));
+contextBridge.exposeInMainWorld('api', {
+  add: (text, opts) => inv('dl:add', text, opts),
+  addItems: (items, opts) => inv('dl:addItems', items, opts),
+  act: (ids, action, arg) => inv('dl:act', ids, action, arg),
+  props: (id, p) => inv('dl:props', id, p),
+  expand: t => inv('batch:expand', t),
+  getSettings: () => inv('settings:get'),
+  setSettings: s => inv('settings:set', s),
+  getQueues: () => inv('queues:get'),
+  setQueues: q => inv('queues:set', q),
+  queueCtl: (id, a) => inv('queue:ctl', id, a),
+  pickFolder: () => inv('dialog:folder'),
+  pickYtDlp: () => inv('dialog:ytdlp'),
+  clipboardUrl: () => inv('clipboard:url'),
+  probe: (items, opts, probeId) => inv('dl:probe', items, opts, probeId),
+  openProgress: ids => inv('progress:open', ids),
+  grab: o => inv('grab:run', o),
+  grabCancel: () => inv('grab:cancel'),
+  exportList: () => inv('list:export'),
+  importList: () => inv('list:import'),
+  power: a => inv('power:do', a),
+  showExtension: () => inv('ext:show'),
+  info: () => inv('app:info'),
+  onUpdate: cb => on('dl:update', cb),
+  onComplete: cb => on('dl:complete', cb),
+  onPrefill: cb => on('add:prefill', cb),
+  onClip: cb => on('clip:url', cb),
+  onPower: cb => on('power:pending', cb),
+  onGrab: cb => on('grab:progress', cb),
+  onToast: cb => on('toast', cb),
+  onProbeProgress: cb => on('dl:probe-progress', cb)
+});
