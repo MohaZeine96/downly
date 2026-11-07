@@ -52,6 +52,20 @@ function loadSettings() {
   settings.sites = (Array.isArray(settings.sites) ? settings.sites : []).map(x => ({ ...x, pass: dec(x.pass) }));
   if (!Array.isArray(settings.queues) || !settings.queues.some(q => q.id === 'main')) settings.queues = [DEFAULT_QUEUE(), ...(Array.isArray(settings.queues) ? settings.queues : [])];
 }
+function resolveYtDlpPath(configuredPath) {
+  const executable = String(configuredPath || '').trim();
+  if (executable && executable !== 'yt-dlp' && executable !== 'yt-dlp.exe') return executable;
+  for (const candidate of [
+    path.join(process.resourcesPath || '', 'yt-dlp.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'yt-dlp.exe'),
+    path.join(app.getAppPath(), 'yt-dlp.exe')
+  ]) {
+    try {
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch {}
+  }
+  return executable || 'yt-dlp';
+}
 function save() {
   try {
     fs.writeFileSync(F('downloads.json'), JSON.stringify(downloads));
@@ -75,8 +89,24 @@ function applySettings() {
   cfg.proxy = settings.proxy.enabled && settings.proxy.host ? { ...settings.proxy, port: +settings.proxy.port || 8080 } : null;
   cfg.timeout = Math.max(5, +settings.timeout || 20);
   cfg.retries = Math.max(0, +settings.retries || 0);
-  cfg.ytDlpPath = settings.ytDlpPath || 'yt-dlp';
+  cfg.ytDlpPath = resolveYtDlpPath(settings.ytDlpPath);
   cfg.ytDlpSpeedLimitKB = settings.speedLimitKB > 0 ? settings.speedLimitKB / Math.max(1, settings.maxActive) : 0;
+  cfg.confirmOverwrite = async filePath => {
+    const options = {
+      type: 'question',
+      title: 'File already exists',
+      message: `“${path.basename(filePath)}” already exists.`,
+      detail: `Do you want to overwrite it?\n${filePath}`,
+      buttons: ['Overwrite', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
+    };
+    const result = win && !win.isDestroyed()
+      ? await dialog.showMessageBox(win, options)
+      : await dialog.showMessageBox(options);
+    return result.response === 0;
+  };
   cfg.conflict = settings.conflict;
   cfg.authFor = host => {
     const s = settings.sites.find(x => x.host && x.user && (host === x.host || host.endsWith('.' + x.host)));
@@ -201,6 +231,13 @@ function pump() {
     const prev = lastStatus.get(d.id);
     if (prev !== d.status) { lastStatus.set(d.id, d.status); if (d.status === 'complete' && prev) onComplete(d); }
     if (ACTIVE.includes(d.status)) qs(d.queue).hadWork = true;
+  }
+  const cancelledIds = downloads.filter(d => d.status === 'cancelled').map(d => d.id);
+  if (cancelledIds.length) {
+    const cancelled = new Set(cancelledIds);
+    downloads = downloads.filter(d => !cancelled.has(d.id));
+    cancelledIds.forEach(id => lastStatus.delete(id));
+    save();
   }
   // queue finished?
   for (const q of settings.queues) {

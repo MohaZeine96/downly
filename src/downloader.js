@@ -8,12 +8,16 @@ const { categoryOf } = require('./utils');
 
 const cfg = {
   proxy: null, timeout: 20, retries: 5, conflict: 'rename',
-  ytDlpPath: 'yt-dlp', ytDlpSpeedLimitKB: 0,
+  ytDlpPath: 'yt-dlp', ytDlpSpeedLimitKB: 0, confirmOverwrite: async () => false,
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) IDMClone/2.0',
   authFor: () => null, folderFor: null
 };
 const MIN_SEG = 512 * 1024;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const overwriteCancelled = () => Object.assign(
+  new Error('Download cancelled because the destination file already exists.'),
+  { code: 'DOWNLOAD_CANCELLED' }
+);
 const basic = (u, p) => 'Basic ' + Buffer.from(`${u}:${p || ''}`).toString('base64');
 const reserved = new Set();
 
@@ -258,12 +262,17 @@ class Download {
     this.name = (this.name.replace(/\.(m3u8|ts|php|html?|aspx?)$/i, '') || 'video') + (hasMap ? '.mp4' : '.ts');
   }
 
-  _plan() {
+  async _plan() {
     const name = sanitize(this.name);
     if (this.autoFolder && cfg.folderFor) { const r = cfg.folderFor(name, this.baseFolder); this.folder = r.folder; this.category = r.category; }
     else this.category = categoryOf(name);
     fs.mkdirSync(this.folder, { recursive: true });
-    if (cfg.conflict === 'overwrite') { this.path = path.join(this.folder, name); removeStaleParts(this.path); }
+    const destination = path.join(this.folder, name);
+    if (fs.existsSync(destination)) {
+      if (!await cfg.confirmOverwrite(destination)) throw overwriteCancelled();
+      this.path = destination;
+      removeStaleParts(this.path);
+    } else if (cfg.conflict === 'overwrite') this.path = destination;
     else this.path = uniquePath(this.folder, name);
     reserved.add(this.path);
     this.segs = [];
@@ -292,7 +301,7 @@ class Download {
         reserved.delete(this.path);
         return;
       }
-      if (!this.path) { if (!this.probed) await this._probe(); if (this._abort) return; this._plan(); }
+      if (!this.path) { if (!this.probed) await this._probe(); if (this._abort) return; await this._plan(); }
       let bytes;
       if (this.kind === 'hls') {
         this.hls.segs.forEach((s, i) => { if (s.done && !fs.existsSync(`${this.path}.idm${i}`)) s.done = false; });
@@ -320,12 +329,15 @@ class Download {
       this.size = bytes; this.segs = []; if (this.hls) this.hls.segs.forEach(s => { s.done = true; });
       this.status = 'complete'; this.completed = Date.now(); this.speed = 0; reserved.delete(this.path);
     } catch (e) {
-      if (!this._abort) { this.status = 'error'; this.error = e.message; }
+      if (!this._abort) {
+        this.status = e.code === 'DOWNLOAD_CANCELLED' ? 'cancelled' : 'error';
+        this.error = this.status === 'error' ? e.message : '';
+      }
       this._abort = true; this._stop();
     } finally { this._running = false; }
   }
 
-  _runYtDlp() {
+  _runYtDlp(overwrite = false) {
     return new Promise((resolve, reject) => {
       fs.mkdirSync(this.folder, { recursive: true });
       if (this.autoFolder && cfg.folderFor) {
@@ -335,11 +347,11 @@ class Download {
       } else this.category = this.category || categoryOf(this.name);
       const output = path.join(this.folder, '%(title).200B [%(id)s].%(ext)s');
       const args = [
-        '--no-playlist', '--continue', '--no-overwrites', '--no-colors', '--newline',
+        '--no-playlist', '--continue', overwrite ? '--force-overwrites' : '--no-overwrites', '--no-colors', '--newline',
         '--progress-template',
         'download:__IDM_PROGRESS__%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s',
-        '--print', 'before_dl:__IDM_FILE__%(filepath)s',
-        '--print', 'after_move:__IDM_FILE__%(filepath)s',
+        '--print', 'before_dl:__IDM_FILE_BEFORE__%(filepath)s',
+        '--print', 'after_move:__IDM_FILE_AFTER__%(filepath)s',
         '-N', String(Math.max(1, Math.min(32, Number(this.conns) || 1))),
         '-o', output, this.url
       ];
@@ -350,15 +362,24 @@ class Download {
       try { child = spawn(cfg.ytDlpPath || 'yt-dlp', args, { windowsHide: true }); }
       catch (e) { reject(e); return; }
       this._child = child;
-      let pending = '', processError = null;
+      let pending = '', processError = null, collision = '';
       const consume = chunk => {
         pending += chunk.toString();
         const lines = pending.split(/\r?\n/);
         pending = lines.pop();
         for (const line of lines) {
-          if (line.startsWith('__IDM_FILE__')) {
-            this.path = line.slice('__IDM_FILE__'.length).trim();
-            if (this.path) { this.name = path.basename(this.path); reserved.add(this.path); }
+          if (line.startsWith('__IDM_FILE_BEFORE__') || line.startsWith('__IDM_FILE_AFTER__')) {
+            const beforeDownload = line.startsWith('__IDM_FILE_BEFORE__');
+            const marker = beforeDownload ? '__IDM_FILE_BEFORE__' : '__IDM_FILE_AFTER__';
+            this.path = line.slice(marker.length).trim();
+            if (this.path) {
+              this.name = path.basename(this.path);
+              reserved.add(this.path);
+              if (beforeDownload && !overwrite && !collision && fs.existsSync(this.path)) {
+                collision = this.path;
+                child.kill();
+              }
+            }
           } else if (line.startsWith('__IDM_PROGRESS__')) {
             const [done, size, speed] = line.slice('__IDM_PROGRESS__'.length).split('|').map(Number);
             if (Number.isFinite(done)) this.externalDone = done;
@@ -371,17 +392,24 @@ class Download {
       child.stdout.on('data', consume);
       child.stderr.on('data', consume);
       child.once('error', e => { processError = e; });
-      child.once('close', code => {
+      child.once('close', async code => {
         if (this._child === child) this._child = null;
         if (this._abort) { resolve(); return; }
-        if (processError) {
+        if (collision) {
+          try {
+            if (!await cfg.confirmOverwrite(collision)) throw overwriteCancelled();
+            await this._runYtDlp(true);
+            resolve();
+          } catch (e) { reject(e); }
+        } else if (processError) {
           reject(processError.code === 'ENOENT'
             ? new Error('yt-dlp was not found. Install it or set its executable path in Options.')
             : processError);
         } else if (code !== 0) reject(new Error(`yt-dlp exited with code ${code}. Check the video URL and site support.`));
         else {
-          if (pending.startsWith('__IDM_FILE__')) {
-            this.path = pending.slice('__IDM_FILE__'.length).trim();
+          if (pending.startsWith('__IDM_FILE_BEFORE__') || pending.startsWith('__IDM_FILE_AFTER__')) {
+            const marker = pending.startsWith('__IDM_FILE_BEFORE__') ? '__IDM_FILE_BEFORE__' : '__IDM_FILE_AFTER__';
+            this.path = pending.slice(marker.length).trim();
             if (this.path) { this.name = path.basename(this.path); reserved.add(this.path); }
           }
           if (this.path && fs.existsSync(this.path)) {
