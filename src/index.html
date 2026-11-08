@@ -123,6 +123,21 @@ body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;bo
   <h3>Add download</h3>
   <label>URL(s) — one per line</label><textarea id="aUrl" placeholder="https://example.com/file.zip"></textarea>
   <label class="ck"><input id="aVideo" type="checkbox"> Use yt-dlp for YouTube and other supported video-sharing sites</label>
+  <div class="hint" id="aYouTubeMusicHint" hidden>YouTube Music links are automatically sent to yt-dlp as audio-only downloads.</div>
+  <div id="aVideoOptions" hidden>
+    <div class="grid">
+      <div><label for="aVideoMode">Download type</label><select id="aVideoMode"><option value="video">Video</option><option value="audio">Audio only (MP3)</option></select></div>
+      <div id="aVideoQualityWrap"><label for="aVideoQuality">Maximum video resolution</label><select id="aVideoQuality">
+        <option value="best">Best available</option><option value="2160">Up to 2160p</option><option value="1440">Up to 1440p</option>
+        <option value="1080">Up to 1080p</option><option value="720">Up to 720p</option><option value="480">Up to 480p</option><option value="360">Up to 360p</option>
+      </select></div>
+      <div id="aAudioQualityWrap" hidden><label for="aAudioQuality">MP3 audio quality</label><select id="aAudioQuality">
+        <option value="320">320 kbps</option><option value="256">256 kbps</option><option value="192" selected>192 kbps</option>
+        <option value="128">128 kbps</option><option value="96">96 kbps</option>
+      </select></div>
+    </div>
+    <div class="hint" id="aAudioHint" hidden>MP3 extraction uses the FFmpeg executable bundled with Downly.</div>
+  </div>
   <label>Save to</label><div class="r2"><input id="aDir"><button class="btn" id="aBrowse">Browse</button></div>
   <div class="grid">
     <div><label>Connections</label><input id="aConns" type="number" min="1" max="32"></div>

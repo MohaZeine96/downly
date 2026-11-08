@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 yt-dlp.exe
+ffmpeg.exe

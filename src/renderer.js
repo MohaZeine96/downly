@@ -19,6 +19,10 @@ const fmtTime = s => {
   s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
   return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
 };
+const isYouTubeMusicUrl = value => {
+  try { return new URL(value).hostname.toLowerCase() === 'music.youtube.com'; }
+  catch { return false; }
+};
 const fmtDate = t => { if (!t) return '-'; const d = new Date(t); return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
 const ICON = { zip: '🗜️', rar: '🗜️', '7z': '🗜️', mp4: '🎬', mkv: '🎬', avi: '🎬', ts: '🎬', webm: '🎬', mp3: '🎵', flac: '🎵', wav: '🎵', pdf: '📕', exe: '⚙️', msi: '⚙️', iso: '💿', jpg: '🖼️', png: '🖼️', gif: '🖼️', doc: '📄', docx: '📄', txt: '📄' };
 const icon = n => ICON[(n.split('.').pop() || '').toLowerCase()] || '📦';
@@ -240,8 +244,15 @@ function openAdd(prefill, videoMode = false) {
     fillQueues($('#aQueue')); $('#aQueue').value = filter.startsWith('q:') ? filter.slice(2) : 'main';
     pendingMeta = {};
     $('#aVideo').checked = videoMode;
+    $('#aVideoMode').value = 'video';
+    $('#aVideoQuality').value = 'best';
+    $('#aAudioQuality').value = '192';
+    applyYouTubeMusicDefaults();
+    updateVideoOptions();
   }
   if (prefill) prefill.forEach(i => { pendingMeta[i.url] = i; });
+  applyYouTubeMusicDefaults();
+  updateVideoOptions();
   invalidateProbe();
   $('#aProbe').textContent = $('#aVideo').checked ? 'Check video URL' : 'Check size';
   open('#mAdd'); $('#aUrl').focus();
@@ -281,7 +292,6 @@ function renderProbeRows() {
 async function checkSizes() {
   const urls = $('#aUrl').value.split(/\s+/).filter(url => /^https?:\/\/\S+$/i.test(url));
   if (!urls.length) return alert('Please enter at least one valid http(s) URL.');
-  const engine = $('#aVideo').checked ? 'yt-dlp' : 'http';
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   probeId = id; probeReady = false;
   probeRows = urls.map(url => ({ url, waiting: true, result: null }));
@@ -289,7 +299,17 @@ async function checkSizes() {
   $('#aProbe').disabled = true; $('#aProbe').textContent = 'Checking…';
   $('#aOk').disabled = true; $('#aLater').disabled = true;
   try {
-    const input = urls.map(url => ({ url, ...(pendingMeta[url] || {}), engine }));
+    const input = urls.map(url => {
+      const youtubeMusic = isYouTubeMusicUrl(url);
+      const engine = youtubeMusic || $('#aVideo').checked ? 'yt-dlp' : 'http';
+      const item = { url, ...(pendingMeta[url] || {}), engine };
+      if (engine === 'yt-dlp') {
+        item.videoMode = youtubeMusic ? 'audio' : $('#aVideoMode').value;
+        item.videoQuality = $('#aVideoQuality').value;
+        item.audioQuality = $('#aAudioQuality').value;
+      }
+      return item;
+    });
     const results = await api.probe(input, { referer: $('#aRef').value, cookie: $('#aCookie').value }, id);
     if (probeId !== id) return;
     probeRows = results.map(result => ({ url: result.url, result }));
@@ -298,7 +318,7 @@ async function checkSizes() {
       const meta = pendingMeta[result.url] || {};
       pendingMeta[result.url] = {
         ...meta, probed: true, probedName: result.name, size: result.size || 0,
-        ranged: result.ranged, kind: result.kind, hls: result.hls, engine: result.engine || engine
+        ranged: result.ranged, kind: result.kind, hls: result.hls, engine: result.engine || 'http'
       };
     }
     probeReady = true;
@@ -315,19 +335,50 @@ async function checkSizes() {
   }
 }
 
-$('#aUrl').addEventListener('input', invalidateProbe);
-['#aRef', '#aCookie'].forEach(selector => $(selector).addEventListener('input', invalidateProbe));
-$('#aVideo').addEventListener('change', () => {
+function applyYouTubeMusicDefaults() {
+  const urls = $('#aUrl').value.split(/\s+/).filter(Boolean);
+  if (!urls.some(isYouTubeMusicUrl)) return;
+  $('#aVideo').checked = true;
+  $('#aVideoMode').value = 'audio';
+}
+$('#aUrl').addEventListener('input', () => {
+  applyYouTubeMusicDefaults();
+  updateVideoOptions();
   invalidateProbe();
   $('#aProbe').textContent = $('#aVideo').checked ? 'Check video URL' : 'Check size';
 });
+['#aRef', '#aCookie'].forEach(selector => $(selector).addEventListener('input', invalidateProbe));
+$('#aVideo').addEventListener('change', () => {
+  updateVideoOptions();
+  invalidateProbe();
+  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video URL' : 'Check size';
+});
+function updateVideoOptions() {
+  const enabled = $('#aVideo').checked;
+  const audio = $('#aVideoMode').value === 'audio';
+  const youtubeMusic = $('#aUrl').value.split(/\s+/).some(isYouTubeMusicUrl);
+  $('#aVideoOptions').hidden = !enabled;
+  $('#aVideoQualityWrap').hidden = audio;
+  $('#aAudioQualityWrap').hidden = !audio;
+  $('#aAudioHint').hidden = !enabled || !audio;
+  $('#aYouTubeMusicHint').hidden = !youtubeMusic;
+}
+$('#aVideoMode').addEventListener('change', updateVideoOptions);
 $('#aProbe').onclick = checkSizes;
 
 async function doAdd(start) {
   if (!probeReady) { await checkSizes(); return; }
+  const meta = Object.fromEntries(Object.entries(pendingMeta).map(([url, item]) => [url, {
+    ...item,
+    ...(item.engine === 'yt-dlp' ? {
+      videoMode: $('#aVideoMode').value,
+      videoQuality: $('#aVideoQuality').value,
+      audioQuality: $('#aAudioQuality').value
+    } : {})
+  }]));
   const r = await api.add($('#aUrl').value, {
     folder: $('#aDir').value, conns: +$('#aConns').value || 8, queue: $('#aQueue').value, start,
-    speedLimitKB: +$('#aLimit').value || 0, referer: $('#aRef').value, cookie: $('#aCookie').value, comment: $('#aComment').value, meta: pendingMeta
+    speedLimitKB: +$('#aLimit').value || 0, referer: $('#aRef').value, cookie: $('#aCookie').value, comment: $('#aComment').value, meta
   });
   if (!r.added && !r.dup) return alert('Please enter at least one valid http(s) URL.');
   close('#mAdd');

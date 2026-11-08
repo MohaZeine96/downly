@@ -6,9 +6,11 @@ const http = require('http'), https = require('https'), tls = require('tls'), { 
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const { categoryOf } = require('./utils');
 
+const VIDEO_QUALITIES = new Set(['2160', '1440', '1080', '720', '480', '360']);
+const AUDIO_QUALITIES = new Set([320, 256, 192, 128, 96]);
 const cfg = {
   proxy: null, timeout: 20, retries: 5, conflict: 'rename',
-  ytDlpPath: 'yt-dlp', ytDlpSpeedLimitKB: 0, confirmOverwrite: async () => false,
+  ytDlpPath: 'yt-dlp', ytDlpFfmpegPath: '', ytDlpSpeedLimitKB: 0, confirmOverwrite: async () => false,
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) IDMClone/2.0',
   authFor: () => null, folderFor: null
 };
@@ -136,8 +138,12 @@ class Download {
       url: '', folder: '', baseFolder: '', autoFolder: false, name: '', path: null, size: 0, ranged: false,
       kind: 'http', engine: 'http', segs: [], hls: null, probed: false, externalDone: 0, status: 'queued', error: '', conns: 8, added: Date.now(), completed: 0,
       queue: 'main', category: '', referer: '', cookie: '', ua: '', speedLimitKB: 0, comment: '', elapsedMs: 0,
+      videoMode: 'video', videoQuality: 'best', audioQuality: 192,
       scheduleDays: [], scheduleStartTime: '', scheduleEndTime: '', scheduleLastStartDay: '', scheduleLastEndDay: '', scheduleForcedDay: ''
     }, o);
+    this.videoMode = this.videoMode === 'audio' ? 'audio' : 'video';
+    this.videoQuality = VIDEO_QUALITIES.has(String(this.videoQuality)) ? String(this.videoQuality) : 'best';
+    this.audioQuality = AUDIO_QUALITIES.has(Number(this.audioQuality)) ? Number(this.audioQuality) : 192;
     if (o.scheduledAt && !this.scheduleDays.length) {
       const start = new Date(o.scheduledAt);
       this.scheduleDays = [start.getDay()];
@@ -214,7 +220,8 @@ class Download {
     const o = {};
     for (const k of ['id', 'url', 'folder', 'baseFolder', 'autoFolder', 'name', 'path', 'size', 'ranged', 'kind', 'engine', 'segs', 'hls', 'probed', 'externalDone',
       'status', 'error', 'conns', 'added', 'completed', 'queue', 'category', 'referer', 'cookie', 'ua', 'speedLimitKB', 'comment',
-      'scheduleDays', 'scheduleStartTime', 'scheduleEndTime', 'scheduleLastStartDay', 'scheduleLastEndDay', 'scheduleForcedDay']) o[k] = this[k];
+      'scheduleDays', 'scheduleStartTime', 'scheduleEndTime', 'scheduleLastStartDay', 'scheduleLastEndDay', 'scheduleForcedDay',
+      'videoMode', 'videoQuality', 'audioQuality']) o[k] = this[k];
     o.elapsedMs = this.elapsedTime();
     return o;
   }
@@ -395,6 +402,28 @@ class Download {
     } finally { this._running = false; }
   }
 
+  _ytDlpArgs(output, overwrite) {
+    const args = [
+      '--no-playlist', '--continue', overwrite ? '--force-overwrites' : '--no-overwrites', '--no-colors', '--newline',
+      '--progress-template',
+      'download:__IDM_PROGRESS__%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s',
+      '--print', 'before_dl:__IDM_FILE_BEFORE__%(filepath)s',
+      '--print', 'after_move:__IDM_FILE_AFTER__%(filepath)s',
+      '-N', String(Math.max(1, Math.min(32, Number(this.conns) || 1))),
+      '--embed-thumbnail'
+    ];
+    if (cfg.ytDlpFfmpegPath) args.push('--ffmpeg-location', cfg.ytDlpFfmpegPath);
+    if (this.videoMode === 'audio') {
+      args.push('-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', `${this.audioQuality}K`);
+    } else if (this.videoQuality !== 'best') {
+      args.push('-f', `bestvideo[height<=${this.videoQuality}]+bestaudio/best[height<=${this.videoQuality}]`);
+    }
+    args.push('-o', output, this.url);
+    const limits = [this.speedLimitKB, cfg.ytDlpSpeedLimitKB].filter(value => value > 0);
+    if (limits.length) args.unshift('--limit-rate', `${Math.floor(Math.min(...limits) * 1024)}B`);
+    return args;
+  }
+
   _runYtDlp(overwrite = false) {
     return new Promise((resolve, reject) => {
       fs.mkdirSync(this.folder, { recursive: true });
@@ -404,23 +433,13 @@ class Download {
         fs.mkdirSync(this.folder, { recursive: true });
       } else this.category = this.category || categoryOf(this.name);
       const output = path.join(this.folder, '%(title).200B [%(id)s].%(ext)s');
-      const args = [
-        '--no-playlist', '--continue', overwrite ? '--force-overwrites' : '--no-overwrites', '--no-colors', '--newline',
-        '--progress-template',
-        'download:__IDM_PROGRESS__%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s',
-        '--print', 'before_dl:__IDM_FILE_BEFORE__%(filepath)s',
-        '--print', 'after_move:__IDM_FILE_AFTER__%(filepath)s',
-        '-N', String(Math.max(1, Math.min(32, Number(this.conns) || 1))),
-        '-o', output, this.url
-      ];
-      const limits = [this.speedLimitKB, cfg.ytDlpSpeedLimitKB].filter(value => value > 0);
-      if (limits.length) args.unshift('--limit-rate', `${Math.floor(Math.min(...limits) * 1024)}B`);
+      const args = this._ytDlpArgs(output, overwrite);
       this.status = 'connecting'; this._last = [Date.now(), this.externalDone];
       let child;
       try { child = spawn(cfg.ytDlpPath || 'yt-dlp', args, { windowsHide: true }); }
       catch (e) { reject(e); return; }
       this._child = child;
-      let pending = '', processError = null, collision = '';
+      let pending = '', diagnostic = '', processError = null, collision = '';
       const consume = chunk => {
         pending += chunk.toString();
         const lines = pending.split(/\r?\n/);
@@ -449,7 +468,10 @@ class Download {
         }
       };
       child.stdout.on('data', consume);
-      child.stderr.on('data', consume);
+      child.stderr.on('data', chunk => {
+        diagnostic = (diagnostic + chunk.toString()).slice(-4000);
+        consume(chunk);
+      });
       child.once('error', e => { processError = e; });
       child.once('close', async code => {
         if (this._child === child) this._child = null;
@@ -464,7 +486,12 @@ class Download {
           reject(processError.code === 'ENOENT'
             ? new Error('yt-dlp was not found. Install it or set its executable path in Options.')
             : processError);
-        } else if (code !== 0) reject(new Error(`yt-dlp exited with code ${code}. Check the video URL and site support.`));
+        } else if (code !== 0) {
+          const details = diagnostic.trim();
+          const missingFfmpeg = /(?:ffmpeg|ffprobe).*(?:not found|not installed|not available)|(?:not found|not installed|not available).*(?:ffmpeg|ffprobe)/i.test(details);
+          const hint = missingFfmpeg ? '\nMP3 audio extraction requires FFmpeg to be installed and available to yt-dlp.' : '';
+          reject(new Error(`yt-dlp exited with code ${code}.${details ? `\n${details}` : ' Check the video URL and site support.'}${hint}`));
+        }
         else {
           if (pending.startsWith('__IDM_FILE_BEFORE__') || pending.startsWith('__IDM_FILE_AFTER__')) {
             const marker = pending.startsWith('__IDM_FILE_BEFORE__') ? '__IDM_FILE_BEFORE__' : '__IDM_FILE_AFTER__';

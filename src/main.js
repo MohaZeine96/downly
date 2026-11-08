@@ -66,6 +66,18 @@ function resolveYtDlpPath(configuredPath) {
   }
   return executable || 'yt-dlp';
 }
+function resolveFfmpegPath() {
+  for (const candidate of [
+    path.join(process.resourcesPath || '', 'ffmpeg.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'ffmpeg.exe'),
+    path.join(app.getAppPath(), 'ffmpeg.exe')
+  ]) {
+    try {
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch {}
+  }
+  return '';
+}
 function save() {
   try {
     fs.writeFileSync(F('downloads.json'), JSON.stringify(downloads));
@@ -90,6 +102,7 @@ function applySettings() {
   cfg.timeout = Math.max(5, +settings.timeout || 20);
   cfg.retries = Math.max(0, +settings.retries || 0);
   cfg.ytDlpPath = resolveYtDlpPath(settings.ytDlpPath);
+  cfg.ytDlpFfmpegPath = resolveFfmpegPath();
   cfg.ytDlpSpeedLimitKB = settings.speedLimitKB > 0 ? settings.speedLimitKB / Math.max(1, settings.maxActive) : 0;
   cfg.confirmOverwrite = async filePath => {
     const options = {
@@ -122,6 +135,11 @@ function applySettings() {
 }
 
 // ---- adding downloads ----
+function isYouTubeMusicUrl(value) {
+  try { return new URL(value).hostname.toLowerCase() === 'music.youtube.com'; }
+  catch { return false; }
+}
+
 function addDownloads(items, opts = {}) {
   let added = 0, dup = 0;
   const ids = [];
@@ -131,12 +149,14 @@ function addDownloads(items, opts = {}) {
     const o = typeof it === 'string' ? { url: it } : it;
     const url = String(o.url || '').trim();
     if (!/^https?:\/\/\S+$/i.test(url)) continue;
+    const youtubeMusic = isYouTubeMusicUrl(url);
     if (downloads.some(d => d.url === url && d.status !== 'complete')) { dup++; continue; }
     const d = new Download({
       url, folder: base, baseFolder: base, autoFolder: auto, conns: opts.conns || settings.conns,
       queue: getQ(opts.queue || 'main').id, referer: o.referer || opts.referer || '', cookie: o.cookie || opts.cookie || '',
       ua: o.ua || '', name: o.probedName || o.filename || o.name || '', size: o.probed ? o.size : 0,
-      ranged: !!o.ranged, kind: o.kind || 'http', engine: o.engine || 'http', hls: o.hls || null, probed: !!o.probed,
+      ranged: !!o.ranged, kind: o.kind || 'http', engine: youtubeMusic ? 'yt-dlp' : o.engine || 'http', hls: o.hls || null, probed: !!o.probed,
+      videoMode: youtubeMusic ? 'audio' : o.videoMode, videoQuality: o.videoQuality, audioQuality: o.audioQuality,
       speedLimitKB: opts.speedLimitKB || 0, comment: opts.comment || '', status: 'queued'
     });
     downloads.push(d);
