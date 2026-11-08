@@ -10,6 +10,13 @@ const fmtSize = n => {
 };
 const fmtDate = value => new Date(value).toLocaleString();
 const escapeText = value => String(value == null ? '' : value);
+const fmtTime = seconds => {
+  if (seconds == null || !Number.isFinite(seconds)) return '—';
+  seconds = Math.round(seconds);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds % 3600 / 60);
+  return hours ? `${hours}h ${minutes}m` : minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+};
 
 function render(items) {
   if (!items.length) {
@@ -44,6 +51,8 @@ function render(items) {
     bottom.className = 'bottom';
     const downloaded = document.createElement('span'); downloaded.textContent = amount;
     const speed = document.createElement('span'); speed.textContent = item.speed ? `${fmtSize(item.speed)}/s` : '';
+    const connections = document.createElement('span');
+    connections.textContent = `${item.conns} connections`;
     const actions = document.createElement('div'); actions.className = 'actions';
     const canStart = item.status !== 'complete' && item.status !== 'connecting' && item.status !== 'downloading' && item.status !== 'merging';
     const start = document.createElement('button');
@@ -55,9 +64,42 @@ function render(items) {
     pause.disabled = !['connecting', 'downloading', 'merging'].includes(item.status);
     pause.addEventListener('click', () => progressApi.act([item.id], 'pause'));
     actions.append(start, pause);
-    bottom.append(downloaded, speed, actions);
+    bottom.append(downloaded, connections, speed, actions);
 
-    row.append(top, bar, bottom);
+    const details = document.createElement('div');
+    details.className = 'progress-details';
+    const elapsed = document.createElement('span');
+    elapsed.textContent = `Elapsed: ${fmtTime(item.elapsed)}`;
+    const remaining = document.createElement('span');
+    remaining.textContent = `Remaining: ${item.status === 'complete' ? '0s' : fmtTime(item.eta)}`;
+    details.append(elapsed, remaining);
+
+    const resumable = document.createElement('div');
+    resumable.className = 'progress-resumable';
+    resumable.textContent = `Resumable: ${item.resumable ? 'Yes' : 'No'}`;
+
+    const connectionDetails = document.createElement('div');
+    connectionDetails.className = 'progress-connections';
+    if (item.engine === 'yt-dlp') {
+      connectionDetails.textContent = 'Individual connection stats unavailable for yt-dlp.';
+    } else if (item.connections && item.connections.length) {
+      for (const connection of item.connections) {
+        const detail = document.createElement('div');
+        detail.className = 'progress-connection';
+        const name = document.createElement('span');
+        name.textContent = `Connection ${connection.id}${connection.segment ? ` · segment ${connection.segment}` : ''}`;
+        const status = document.createElement('span');
+        status.textContent = connection.status;
+        const speed = document.createElement('span');
+        speed.textContent = `${fmtSize(connection.speed)}/s`;
+        detail.append(name, status, speed);
+        connectionDetails.append(detail);
+      }
+    } else {
+      connectionDetails.textContent = 'No individual connections currently running.';
+    }
+
+    row.append(top, bar, bottom, details, resumable, connectionDetails);
     return row;
   }));
 }
@@ -89,11 +131,45 @@ function renderConnections({ items, speed, maxActive, speedLimitKB }) {
     name.textContent = item.name; name.title = item.name;
     const itemSpeed = document.createElement('span');
     itemSpeed.textContent = `${fmtSize(item.speed)}/s`;
-    const connections = document.createElement('span');
-    connections.textContent = `${item.conns} per download`;
-    row.append(name, itemSpeed, connections);
-    return row;
-  }));
+    const status = document.createElement('span');
+    status.textContent = item.status;
+    const allowed = document.createElement('span');
+    allowed.textContent = `${item.conns} allowed`;
+    row.append(name, status, itemSpeed, allowed);
+    const rows = [row];
+    if (item.engine === 'yt-dlp') {
+      const detail = document.createElement('div');
+      detail.className = 'conn-row connection-detail';
+      const note = document.createElement('span');
+      note.className = 'connection-note';
+      note.textContent = 'Individual connection stats unavailable for yt-dlp.';
+      detail.append(note);
+      rows.push(detail);
+    } else if (item.connections.length) {
+      for (const connection of item.connections) {
+        const detail = document.createElement('div');
+        detail.className = 'conn-row connection-detail';
+        const label = document.createElement('span');
+        label.textContent = `Connection ${connection.id}${connection.segment ? ` · segment ${connection.segment}` : ''}`;
+        const connectionStatus = document.createElement('span');
+        connectionStatus.textContent = connection.status;
+        const connectionSpeed = document.createElement('span');
+        connectionSpeed.textContent = `${fmtSize(connection.speed)}/s`;
+        const blank = document.createElement('span');
+        detail.append(label, connectionStatus, connectionSpeed, blank);
+        rows.push(detail);
+      }
+    } else {
+      const detail = document.createElement('div');
+      detail.className = 'conn-row connection-detail';
+      const note = document.createElement('span');
+      note.className = 'connection-note';
+      note.textContent = 'No individual connections currently running.';
+      detail.append(note);
+      rows.push(detail);
+    }
+    return rows;
+  }).flat());
 }
 
 document.querySelector('#saveConnectionSettings').addEventListener('click', async () => {

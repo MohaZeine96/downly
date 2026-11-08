@@ -135,7 +135,7 @@ class Download {
       id: String(Date.now()) + Math.random().toString(36).slice(2, 6),
       url: '', folder: '', baseFolder: '', autoFolder: false, name: '', path: null, size: 0, ranged: false,
       kind: 'http', engine: 'http', segs: [], hls: null, probed: false, externalDone: 0, status: 'queued', error: '', conns: 8, added: Date.now(), completed: 0,
-      queue: 'main', category: '', referer: '', cookie: '', ua: '', speedLimitKB: 0, comment: '',
+      queue: 'main', category: '', referer: '', cookie: '', ua: '', speedLimitKB: 0, comment: '', elapsedMs: 0,
       scheduleDays: [], scheduleStartTime: '', scheduleEndTime: '', scheduleLastStartDay: '', scheduleLastEndDay: '', scheduleForcedDay: ''
     }, o);
     if (o.scheduledAt && !this.scheduleDays.length) {
@@ -156,6 +156,8 @@ class Download {
     }
     this.limiter = new Limiter(this.speedLimitKB);
     this.speed = 0; this.force = false; this.later = false;
+    this._timingStartedAt = null;
+    this._connections = []; this._nextConnectionId = 1;
     this._abort = false; this._running = false; this._active = 0; this._live = 0;
     this._reqs = new Set(); this._keys = null;
     if (this.path && this.status !== 'complete') reserved.add(this.path);
@@ -171,11 +173,49 @@ class Download {
 
   setLimit(kb) { this.speedLimitKB = kb || 0; this.limiter.bps = this.speedLimitKB * 1024; }
 
+  elapsedTime() {
+    return this.elapsedMs + (this._timingStartedAt === null ? 0 : Date.now() - this._timingStartedAt);
+  }
+
+  startTiming() {
+    if (this._timingStartedAt === null) this._timingStartedAt = Date.now();
+  }
+
+  stopTiming() {
+    if (this._timingStartedAt === null) return;
+    this.elapsedMs += Date.now() - this._timingStartedAt;
+    this._timingStartedAt = null;
+  }
+
+  connectionSnapshot() {
+    const now = Date.now();
+    for (const connection of this._connections) {
+      const elapsed = now - connection.sampleAt;
+      if (elapsed >= 500) {
+        connection.speed = (connection.bytes - connection.sampleBytes) / (elapsed / 1000);
+        connection.sampleAt = now;
+        connection.sampleBytes = connection.bytes;
+      }
+    }
+    return this._connections.map(({ id, segment, status, speed }) => ({ id, segment, status, speed }));
+  }
+
+  createConnection() {
+    const now = Date.now();
+    const connection = {
+      id: this._nextConnectionId++, segment: null, status: 'Waiting', speed: 0,
+      bytes: 0, sampleBytes: 0, sampleAt: now
+    };
+    this._connections.push(connection);
+    return connection;
+  }
+
   toJSON() {
     const o = {};
     for (const k of ['id', 'url', 'folder', 'baseFolder', 'autoFolder', 'name', 'path', 'size', 'ranged', 'kind', 'engine', 'segs', 'hls', 'probed', 'externalDone',
       'status', 'error', 'conns', 'added', 'completed', 'queue', 'category', 'referer', 'cookie', 'ua', 'speedLimitKB', 'comment',
       'scheduleDays', 'scheduleStartTime', 'scheduleEndTime', 'scheduleLastStartDay', 'scheduleLastEndDay', 'scheduleForcedDay']) o[k] = this[k];
+    o.elapsedMs = this.elapsedTime();
     return o;
   }
 
@@ -186,6 +226,7 @@ class Download {
   }
   pause() {
     if (['complete', 'error'].includes(this.status)) return;
+    this.stopTiming();
     this._abort = true; this._stop(); this.status = 'paused'; this.speed = 0;
   }
   allParts() {
@@ -293,10 +334,12 @@ class Download {
     this._running = true; this._abort = false; this.status = 'connecting'; this.error = ''; this.force = false;
     try {
       while (this._active > 0) await sleep(50); // let stale workers of an aborted run exit
+      this._connections = []; this._nextConnectionId = 1;
       this._live = 0;
       if (this.engine === 'yt-dlp') {
         await this._runYtDlp();
         if (this._abort) return;
+        this.stopTiming();
         this.status = 'complete'; this.completed = Date.now(); this.speed = 0;
         reserved.delete(this.path);
         return;
@@ -305,7 +348,7 @@ class Download {
       let bytes;
       if (this.kind === 'hls') {
         this.hls.segs.forEach((s, i) => { if (s.done && !fs.existsSync(`${this.path}.idm${i}`)) s.done = false; });
-        this.status = 'downloading'; this._last = [Date.now(), this.done];
+        this.status = 'downloading'; this.startTiming(); this._last = [Date.now(), this.done];
         await this._runHls();
         if (this._abort) return;
         this.status = 'merging'; bytes = await this._merge(this.allParts());
@@ -314,11 +357,24 @@ class Download {
           if (this.ranged && fs.existsSync(g.part)) g.done = Math.min(fs.statSync(g.part).size, g.end != null ? g.end - g.start + 1 : Infinity);
           else { g.done = 0; try { fs.unlinkSync(g.part); } catch {} }
         }
-        this.status = 'downloading'; this._last = [Date.now(), this.done];
+        this.status = 'downloading'; this.startTiming(); this._last = [Date.now(), this.done];
         const worker = async g => {
+          const connection = this.createConnection();
           this._active++;
-          try { let cur = g; while (cur && !this._abort) { await this._seg(cur); if (this._abort) return; cur = this._steal(); } }
-          finally { this._active--; }
+          try {
+            let cur = g;
+            while (cur && !this._abort) {
+              connection.segment = this.segs.indexOf(cur) + 1;
+              await this._seg(cur, connection);
+              if (this._abort) return;
+              cur = this._steal();
+            }
+            if (!this._abort) connection.status = 'Complete';
+          } finally {
+            if (this._abort) connection.status = 'Paused';
+            else if (connection.status !== 'Complete') connection.status = 'Error';
+            this._active--;
+          }
         };
         await Promise.all(this.segs.slice().map(worker));
         if (this._abort) return;
@@ -327,8 +383,10 @@ class Download {
         if (this.ranged && this.size && bytes !== this.size) throw new Error(`Size mismatch (${bytes} of ${this.size})`);
       }
       this.size = bytes; this.segs = []; if (this.hls) this.hls.segs.forEach(s => { s.done = true; });
+      this.stopTiming();
       this.status = 'complete'; this.completed = Date.now(); this.speed = 0; reserved.delete(this.path);
     } catch (e) {
+      this.stopTiming();
       if (!this._abort) {
         this.status = e.code === 'DOWNLOAD_CANCELLED' ? 'cancelled' : 'error';
         this.error = this.status === 'error' ? e.message : '';
@@ -385,6 +443,7 @@ class Download {
             if (Number.isFinite(done)) this.externalDone = done;
             if (Number.isFinite(size) && size > 0) this.size = size;
             if (Number.isFinite(speed) && speed >= 0) this.speed = speed;
+            this.startTiming();
             this.status = 'downloading';
           }
         }
@@ -438,14 +497,14 @@ class Download {
     return ng;
   }
 
-  async _seg(g) {
+  async _seg(g, connection) {
     let tries = 0, lastErr = '';
     while (!this._abort) {
       const pos = g.start + g.done;
       if (g.end != null && pos > g.end) return;
       const before = g.done;
-      try { await this._fetch(g, pos); if (!this.ranged) return; }
-      catch (e) { lastErr = e.message; }
+      try { await this._fetch(g, pos, connection); if (!this.ranged) return; }
+      catch (e) { lastErr = e.message; connection.status = 'Retrying'; }
       if (this._abort) return;
       if (g.done === before) {
         if (++tries > cfg.retries) throw new Error(lastErr || 'Connection failed');
@@ -454,9 +513,10 @@ class Download {
     }
   }
 
-  _fetch(g, pos) {
+  _fetch(g, pos, connection) {
     return new Promise(async (resolve, reject) => {
       let r;
+      connection.status = 'Connecting';
       try { r = await request(this.url, this, this.ranged ? { Range: `bytes=${pos}-${g.end}` } : {}); }
       catch (e) { return reject(e); }
       const { res, req } = r;
@@ -464,6 +524,7 @@ class Download {
       if (this.ranged ? res.statusCode !== 206 : res.statusCode >= 400) {
         res.resume(); this._reqs.delete(req); return reject(new Error('HTTP ' + res.statusCode));
       }
+      connection.status = 'Downloading';
       const out = fs.createWriteStream(g.part, { flags: 'a' });
       let finished = false, settled = false;
       const end = err => {
@@ -477,7 +538,7 @@ class Download {
           const remain = g.end - (g.start + g.done) + 1;
           if (chunk.length >= remain) { chunk = chunk.slice(0, Math.max(0, remain)); finished = true; }
         }
-        if (chunk.length) { g.done += chunk.length; out.write(chunk); }
+        if (chunk.length) { g.done += chunk.length; connection.bytes += chunk.length; out.write(chunk); }
         if (finished) { res.pause(); req.destroy(); end(); return; }
         const d = Math.max(limiter.delay(c.length), this.limiter.delay(c.length));
         if (d) { res.pause(); setTimeout(() => res.resume(), d); }
@@ -492,30 +553,44 @@ class Download {
   async _runHls() {
     const segs = this.hls.segs; let next = 0;
     const worker = async () => {
+      const connection = this.createConnection();
       this._active++;
       try {
         while (!this._abort) {
           const i = next++; if (i >= segs.length) return;
-          if (!segs[i].done) await this._hlsSeg(segs[i], i);
+          if (!segs[i].done) {
+            connection.segment = i + 1;
+            connection.status = 'Downloading';
+            await this._hlsSeg(segs[i], i, connection);
+          }
         }
-      } finally { this._active--; }
+      } catch (e) {
+        connection.status = 'Error';
+        throw e;
+      } finally {
+        if (this._abort) connection.status = 'Paused';
+        else if (connection.status !== 'Error') connection.status = 'Complete';
+        this._active--;
+      }
     };
     await Promise.all(Array.from({ length: Math.max(1, Math.min(this.conns, segs.length)) }, worker));
     if (!this._abort && segs.some(s => !s.done)) throw new Error('Incomplete download');
   }
 
-  async _hlsSeg(s, i) {
+  async _hlsSeg(s, i, connection) {
     let tries = 0;
     for (;;) {
       if (this._abort) return;
       try {
-        const raw = await this._getBuf(s.u);
+        connection.status = 'Downloading';
+        const raw = await this._getBuf(s.u, false, connection);
         const rawLen = raw.length;
         const buf = s.key ? await this._decrypt(raw, s) : raw;
         fs.writeFileSync(`${this.path}.idm${i}`, buf);
         s.bytes = rawLen; s.done = true; this._live -= rawLen;
         return;
       } catch (e) {
+        connection.status = 'Retrying';
         if (this._abort) return;
         if (++tries > cfg.retries) throw e;
         await sleep(1500);
@@ -534,7 +609,7 @@ class Download {
     return Buffer.concat([d.update(buf), d.final()]);
   }
 
-  async _getBuf(url, noCount) {
+  async _getBuf(url, noCount, connection) {
     const { res, req } = await request(url, this);
     this._reqs.add(req);
     if (res.statusCode >= 400) { res.resume(); this._reqs.delete(req); throw new Error('HTTP ' + res.statusCode); }
@@ -544,6 +619,7 @@ class Download {
         const ch = [];
         res.on('data', c => {
           ch.push(c); got += c.length; if (!noCount) this._live += c.length;
+          if (connection) connection.bytes += c.length;
           const d = Math.max(limiter.delay(c.length), this.limiter.delay(c.length));
           if (d) { res.pause(); setTimeout(() => res.resume(), d); }
         });
@@ -596,6 +672,8 @@ class Download {
       folder: this.folder, size, done, speed: this.speed, status: this.status, error: this.error, added: this.added,
       completed: this.completed, queue: this.queue, category: this.category || categoryOf(this.name), referer: this.referer,
       cookie: this.cookie, comment: this.comment, speedLimitKB: this.speedLimitKB, conns: this.conns, kind: this.kind,
+      elapsed: this.elapsedTime() / 1000,
+      connections: this.connectionSnapshot(),
       engine: this.engine,
       scheduleDays: this.scheduleDays,
       scheduleStartTime: this.scheduleStartTime,
