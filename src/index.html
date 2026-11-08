@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
-<title>IDM Clone</title>
+<title>Downly</title>
 <style>
 :root{--bg:#14171c;--panel:#1b1f26;--panel2:#242a33;--line:#2a303a;--text:#e6e9ef;--mut:#8b94a3;--acc:#3b9cff;--ok:#3ecf6e;--err:#ff5d5d;--warn:#f5a623;--sel:#223044}
 body[data-theme=light]{--bg:#f4f6f9;--panel:#fff;--panel2:#eef1f5;--line:#d9dee6;--text:#1c2430;--mut:#6a7585;--acc:#1b7fe0;--sel:#dbeafe}
@@ -187,7 +187,7 @@ body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;bo
     <label class="ck"><input type="checkbox" id="sNotify"> Show notification when a download completes</label>
     <label class="ck"><input type="checkbox" id="sSound"> Play sound when a download completes</label>
     <label class="ck"><input type="checkbox" id="sClip"> Monitor clipboard for download links</label>
-    <label class="ck"><input type="checkbox" id="sTray"> Close button minimizes to system tray</label>
+    <label class="ck"><input type="checkbox" id="sTray"> Close button sends the app to the system tray</label>
     <label class="ck"><input type="checkbox" id="sBoot"> Start with the operating system</label>
     <label>Run command after each download (antivirus etc.) — <code>{file}</code> is replaced by the file path</label>
     <input id="sPost" placeholder='e.g.  "C:\Program Files\AV\scan.exe" {file}'>
@@ -212,7 +212,7 @@ body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;bo
     <label class="ck"><input type="checkbox" id="sExtDlg"> Show the “Add download” dialog for links sent from the browser</label>
     <div class="r2" style="margin:12px 0"><button class="btn p" id="sExt">Open browser extension folder</button></div>
     <div class="hint" id="sExtInfo"></div>
-    <div class="hint"><b>Install (Chrome / Edge / Brave / Opera):</b> open <code>chrome://extensions</code> → enable <i>Developer mode</i> → <i>Load unpacked</i> → select the extension folder. The extension captures downloads, adds a right-click “Download with IDM Clone”, and detects videos on web pages (a popup lists them).</div>
+    <div class="hint"><b>Install (Chrome / Edge / Brave / Opera):</b> open <code>chrome://extensions</code> → enable <i>Developer mode</i> → <i>Load unpacked</i> → select the extension folder. The extension captures downloads, adds a right-click “Download with Downly”, and detects videos on web pages (a popup lists them).</div>
   </div>
   <div class="pane" data-p="sites">
     <div class="hint">Credentials used automatically (HTTP Basic auth) for these hosts. Passwords are encrypted with the OS keychain when available.</div>

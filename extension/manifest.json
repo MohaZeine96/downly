@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "IDM Clone Integration",
+  "name": "Downly Integration",
   "version": "1.0.0",
-  "description": "Sends downloads, links and detected videos to the IDM Clone desktop app.",
+  "description": "Sends downloads, links and detected videos to the Downly desktop app.",
   "permissions": [
     "downloads",
     "contextMenus",
@@ -22,7 +22,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "IDM Clone",
+    "default_title": "Downly",
     "default_icon": "icon128.png"
   },
   "icons": {

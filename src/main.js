@@ -259,7 +259,7 @@ function pump() {
       items: downloads.map(d => d.snapshot()),
       qs: settings.queues.map(q => ({ id: q.id, running: qs(q.id).running })), speed
     });
-    win.setTitle(speed > 0 ? `IDM Clone — ${(speed / 1048576).toFixed(2)} MB/s` : 'IDM Clone');
+    win.setTitle(speed > 0 ? `Downly — ${(speed / 1048576).toFixed(2)} MB/s` : 'Downly');
   }
   sendProgressUpdate();
 }
@@ -280,7 +280,7 @@ function startServer() {
     }
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
     const json = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
-    if (req.url === '/ping') return json(200, { ok: true, app: 'IDM Clone', exts: settings.captureExts });
+    if (req.url === '/ping') return json(200, { ok: true, app: 'Downly', exts: settings.captureExts });
     if (req.method === 'POST' && req.url === '/add') {
       let body = '';
       req.on('data', c => { body += c; if (body.length > 2e6) req.destroy(); });
@@ -341,22 +341,25 @@ function showProgressWindow(ids) {
 }
 function createWindow() {
   win = new BrowserWindow({
-    width: 1180, height: 740, minWidth: 900, minHeight: 540, backgroundColor: '#14171c', title: 'IDM Clone',
+    width: 1180, height: 740, minWidth: 900, minHeight: 540, backgroundColor: '#14171c', title: 'Downly',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' }
   });
   Menu.setApplicationMenu(null);
   win.loadFile(path.join(__dirname, 'index.html'));
   win.on('close', e => {
-    if (!quitting && settings.minimizeToTray && tray) { e.preventDefault(); win.hide(); }
+    if (quitting) return;
+    e.preventDefault();
+    if (settings.minimizeToTray && tray) win.hide();
+    else { quitting = true; app.quit(); }
   });
 }
 function createTray() {
   try {
     tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 20, height: 20 }));
-    tray.setToolTip('IDM Clone');
+    tray.setToolTip('Downly');
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: 'Show IDM Clone', click: showWindow },
+      { label: 'Show Downly', click: showWindow },
       { label: 'Resume all', click: () => downloads.forEach(d => { if (['paused', 'error'].includes(d.status)) { d.status = 'queued'; d.force = true; } }) },
       { label: 'Stop all', click: () => downloads.forEach(d => d.pause()) },
       { type: 'separator' },

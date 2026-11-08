@@ -1,4 +1,4 @@
-// IDM Clone browser integration (Chrome / Edge / Brave / Opera, Manifest V3)
+// Downly browser integration (Chrome / Edge / Brave / Opera, Manifest V3)
 const DEF = {
   enabled: true, sniff: true, port: 7395, minSizeMB: 0, excludeHosts: '',
   exts: 'zip rar 7z tar gz bz2 xz tgz iso exe msi dmg pkg deb rpm apk pdf doc docx xls xlsx ppt pptx epub mp3 flac wav m4a mp4 mkv avi mov wmv flv webm m4v mpg mpeg'
@@ -54,12 +54,12 @@ chrome.downloads.onCreated.addListener(async item => {
 
 // ---- context menus ----
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({ id: 'idm-link', title: 'Download with IDM Clone', contexts: ['link', 'video', 'audio', 'image'] });
+  chrome.contextMenus.create({ id: 'idm-link', title: 'Download with Downly', contexts: ['link', 'video', 'audio', 'image'] });
   chrome.contextMenus.create({ id: 'idm-page', title: 'Download all links on this page…', contexts: ['page'] });
 });
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const s = await getSettings();
-  if (!(await alive(s))) return notify('IDM Clone is not running. Start the app first.');
+  if (!(await alive(s))) return notify('Downly is not running. Start the app first.');
   if (info.menuItemId === 'idm-link') {
     const url = info.linkUrl || info.srcUrl; if (!url) return;
     await sendItems([{ url, referer: info.pageUrl || (tab && tab.url) || '' }], s, false);
@@ -75,7 +75,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 function notify(msg) {
-  chrome.notifications && chrome.notifications.create({ type: 'basic', iconUrl: 'icon128.png', title: 'IDM Clone', message: msg });
+  chrome.notifications && chrome.notifications.create({ type: 'basic', iconUrl: 'icon128.png', title: 'Downly', message: msg });
 }
 
 // ---- media sniffer ----
@@ -116,7 +116,7 @@ chrome.runtime.onMessage.addListener((msg, _, reply) => {
     const s = await getSettings();
     if (msg.type === 'status') return reply({ alive: await alive(s) });
     if (msg.type === 'send') {
-      if (!(await alive(s))) return reply({ ok: false, error: 'IDM Clone is not running' });
+      if (!(await alive(s))) return reply({ ok: false, error: 'Downly is not running' });
       const r = await sendItems(msg.items, s, !!msg.silent); return reply(r);
     }
   })().catch(e => reply({ ok: false, error: String(e) }));

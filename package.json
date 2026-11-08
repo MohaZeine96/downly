@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "com.example.idmclone",
-    "productName": "IDM Clone",
+    "productName": "Downly",
     "files": [
       "src/**/*",
       "package.json"

@@ -1,4 +1,4 @@
-# downly build with electron
+# Downly
 
 An Internet Download Manager style downloader with browser integration.
 
@@ -17,7 +17,7 @@ Build an installer: `npm run dist`
 2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, pick the `extension/` folder
    (Options -> Browser -> "Open browser extension folder" opens it).
 3. Downloads of the configured file types are captured automatically; right-click any link/video/image ->
-   "Download with IDM Clone"; right-click a page -> "Download all links on this page";
+   "Download with Downly"; right-click a page -> "Download all links on this page";
    the toolbar popup lists videos/audio detected on the current page.
    If the app is not running, the browser keeps handling downloads itself.
    Only extension origins may talk to the local server (web pages get 403).

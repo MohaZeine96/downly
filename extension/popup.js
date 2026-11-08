@@ -8,7 +8,7 @@ async function init() {
   $('#enabled').checked = s.enabled; $('#sniff').checked = s.sniff; $('#port').value = s.port; $('#min').value = s.minSizeMB;
   // pull the extension list from the app when it is running and the user has no custom list yet
   const st = await chrome.runtime.sendMessage({ type: 'status' });
-  $('#dot').classList.toggle('on', !!st.alive); $('#st').textContent = st.alive ? 'Connected to IDM Clone' : 'App not running';
+  $('#dot').classList.toggle('on', !!st.alive); $('#st').textContent = st.alive ? 'Connected to Downly' : 'App not running';
   if (!s.exts) { try { const r = await fetch(`http://127.0.0.1:${s.port}/ping`); const j = await r.json(); $('#exts').value = j.exts || ''; } catch {} }
   else $('#exts').value = s.exts;
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -32,7 +32,7 @@ function render() {
 async function send(list, ext) {
   const items = list.map(m => ({ url: m.url, referer: tab.url, filename: m.title ? m.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 120) + (m.kind === 'HLS' ? '.ts' : '') : '' }));
   const r = await chrome.runtime.sendMessage({ type: 'send', items });
-  $('#st').textContent = r && r.ok ? 'Sent to IDM Clone ✔' : (r && r.error) || 'Failed';
+  $('#st').textContent = r && r.ok ? 'Sent to Downly ✔' : (r && r.error) || 'Failed';
 }
 $('#all').onclick = () => send(media);
 const save = () => chrome.storage.local.set({
