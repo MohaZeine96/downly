@@ -80,7 +80,7 @@ body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;bo
 <body data-theme="dark">
 <div class="toolbar">
   <button id="bAdd" title="Add URL (Ctrl+N)"><span>➕</span>Add URL</button>
-  <button id="bVideo" title="Download a video-sharing site URL with yt-dlp"><span>🎥</span>Video URL</button>
+  <button id="bVideo" title="Download video or audio from supported sites with yt-dlp"><span>🎥</span>Video / Audio</button>
   <button id="bBatch"><span>🧩</span>Batch</button>
   <button id="bGrab"><span>🕷️</span>Grabber</button>
   <div class="vr"></div>
@@ -122,7 +122,7 @@ body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;bo
 <div class="modal" id="mAdd"><div class="box">
   <h3>Add download</h3>
   <label>URL(s) — one per line</label><textarea id="aUrl" placeholder="https://example.com/file.zip"></textarea>
-  <label class="ck"><input id="aVideo" type="checkbox"> Use yt-dlp for YouTube and other supported video-sharing sites</label>
+  <label class="ck"><input id="aVideo" type="checkbox"> Use yt-dlp for video or audio from supported sites</label>
   <div class="hint" id="aYouTubeMusicHint" hidden>YouTube Music links are automatically sent to yt-dlp as audio-only downloads.</div>
   <div id="aVideoOptions" hidden>
     <div class="grid">
@@ -199,7 +199,7 @@ body.drop::after{content:'Drop link(s) to download';position:fixed;inset:10px;bo
     <label>yt-dlp executable (optional; blank uses yt-dlp from PATH)</label>
     <div class="r2"><input id="sYtDlp" placeholder="yt-dlp or full executable path"><button class="btn" id="sYtDlpBrowse">Browse</button></div>
     <div class="hint">Supports sites handled by yt-dlp. Use only for content you have permission to download; DRM-protected content is not supported. Install yt-dlp separately.</div>
-    <label class="ck"><input type="checkbox" id="sNotify"> Show notification when a download completes</label>
+    <label class="ck"><input type="checkbox" id="sNotify"> Show a Windows notification when a download completes</label>
     <label class="ck"><input type="checkbox" id="sSound"> Play sound when a download completes</label>
     <label class="ck"><input type="checkbox" id="sClip"> Monitor clipboard for download links</label>
     <label class="ck"><input type="checkbox" id="sTray"> Close button sends the app to the system tray</label>

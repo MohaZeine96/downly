@@ -13,9 +13,14 @@ Build an installer: `npm run dist`. Windows builds bundle `yt-dlp.exe` and `ffmp
 
 ## Browser extension (Chrome / Edge / Brave / Opera)
 
+Create a distributable ZIP with `npm run package:extension`. It is written to
+`dist/Downly-Browser-Extension-1.0.0.zip` with `manifest.json` at the archive root.
+To install locally, extract the ZIP, open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
+and select the extracted folder. To publish through the Chrome Web Store, upload the ZIP package.
+The app's Options -> Browser -> "Open browser extension folder" opens the source extension folder.
+
 1. Start the app (it listens on 127.0.0.1:7395, changeable in Options -> Browser).
-2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, pick the `extension/` folder
-   (Options -> Browser -> "Open browser extension folder" opens it).
+2. Use the installed extension:
 3. Downloads of the configured file types are captured automatically; right-click any link/video/image ->
    "Download with Downly"; right-click a page -> "Download all links on this page";
    the toolbar popup lists videos/audio detected on the current page.

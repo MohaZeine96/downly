@@ -2,7 +2,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 let items = [], qsRun = {}, settings = {}, queues = [], filter = 'all', sel = new Set(), lastId = null, visIds = [];
 let sort = { key: null, dir: 1 }, hist = [], pendingMeta = {}, grabFiles = [], qEdit = [], qIdx = 0, powerTimer = null;
-let probeId = '', probeReady = false, probeRows = [], scheduleIds = [];
+let probeId = '', probeReady = false, probeRows = [], scheduleIds = [], autoProbeTimer = null;
 const CATS = ['Compressed', 'Documents', 'Music', 'Programs', 'Video', 'Pictures', 'General'];
 const ACTIVE = ['downloading', 'connecting', 'merging', 'queued'];
 const rows = new Map();
@@ -254,16 +254,22 @@ function openAdd(prefill, videoMode = false) {
   applyYouTubeMusicDefaults();
   updateVideoOptions();
   invalidateProbe();
-  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video URL' : 'Check size';
+  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video/audio URL' : 'Check size';
   open('#mAdd'); $('#aUrl').focus();
+  scheduleAutoProbe();
 }
 $('#bAdd').onclick = async () => {
   const c = await api.clipboardUrl();
   openAdd(c ? [{ url: c }] : null);
 };
-$('#bVideo').onclick = () => openAdd(null, true);
+$('#bVideo').onclick = async () => {
+  const c = await api.clipboardUrl();
+  openAdd(c ? [{ url: c }] : null, true);
+};
 $('#aBrowse').onclick = async () => { const d = await api.pickFolder(); if (d) $('#aDir').value = d; };
 function invalidateProbe() {
+  clearTimeout(autoProbeTimer);
+  autoProbeTimer = null;
   probeId = ''; probeReady = false; probeRows = [];
   for (const meta of Object.values(pendingMeta)) {
     delete meta.probed; delete meta.probedName; delete meta.size;
@@ -290,6 +296,8 @@ function renderProbeRows() {
 }
 
 async function checkSizes() {
+  clearTimeout(autoProbeTimer);
+  autoProbeTimer = null;
   const urls = $('#aUrl').value.split(/\s+/).filter(url => /^https?:\/\/\S+$/i.test(url));
   if (!urls.length) return alert('Please enter at least one valid http(s) URL.');
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -335,6 +343,20 @@ async function checkSizes() {
   }
 }
 
+function scheduleAutoProbe() {
+  clearTimeout(autoProbeTimer);
+  autoProbeTimer = null;
+  const urls = $('#aUrl').value.trim().split(/\s+/).filter(Boolean);
+  if (!$('#mAdd').classList.contains('on') || !urls.length ||
+    urls.some(url => !/^https?:\/\/\S+$/i.test(url)) ||
+    (!$('#aVideo').checked && !urls.some(isYouTubeMusicUrl))) return;
+  $('#aProbe').textContent = 'Checking video/audio URL…';
+  autoProbeTimer = setTimeout(() => {
+    autoProbeTimer = null;
+    if ($('#mAdd').classList.contains('on')) checkSizes();
+  }, 500);
+}
+
 function applyYouTubeMusicDefaults() {
   const urls = $('#aUrl').value.split(/\s+/).filter(Boolean);
   if (!urls.some(isYouTubeMusicUrl)) return;
@@ -345,13 +367,18 @@ $('#aUrl').addEventListener('input', () => {
   applyYouTubeMusicDefaults();
   updateVideoOptions();
   invalidateProbe();
-  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video URL' : 'Check size';
+  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video/audio URL' : 'Check size';
+  scheduleAutoProbe();
 });
-['#aRef', '#aCookie'].forEach(selector => $(selector).addEventListener('input', invalidateProbe));
+['#aRef', '#aCookie'].forEach(selector => $(selector).addEventListener('input', () => {
+  invalidateProbe();
+  scheduleAutoProbe();
+}));
 $('#aVideo').addEventListener('change', () => {
   updateVideoOptions();
   invalidateProbe();
-  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video URL' : 'Check size';
+  $('#aProbe').textContent = $('#aVideo').checked ? 'Check video/audio URL' : 'Check size';
+  scheduleAutoProbe();
 });
 function updateVideoOptions() {
   const enabled = $('#aVideo').checked;
@@ -363,7 +390,12 @@ function updateVideoOptions() {
   $('#aAudioHint').hidden = !enabled || !audio;
   $('#aYouTubeMusicHint').hidden = !youtubeMusic;
 }
-$('#aVideoMode').addEventListener('change', updateVideoOptions);
+$('#aVideoMode').addEventListener('change', () => {
+  updateVideoOptions();
+  invalidateProbe();
+  $('#aProbe').textContent = 'Check video/audio URL';
+  scheduleAutoProbe();
+});
 $('#aProbe').onclick = checkSizes;
 
 async function doAdd(start) {
@@ -625,7 +657,7 @@ api.onProbeProgress(({ probeId: id, index, result }) => {
   probeRows[index - 1] = { url: result.url, result, waiting: false };
   renderProbeRows();
 });
-api.onComplete(c => { if (c.sound) beep(); toast('✔ Completed: ' + c.name); });
+api.onComplete(c => { if (c.sound) beep(); });
 api.onPrefill(list => openAdd(list));
 api.onClip(url => { if (!anyModal()) openAdd([{ url }]); });
 api.onToast(toast);

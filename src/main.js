@@ -398,6 +398,7 @@ else {
     if (u.length && win) win.webContents.send('add:prefill', u.map(url => ({ url })));
   });
   app.whenReady().then(async () => {
+    if (process.platform === 'win32') app.setAppUserModelId('com.example.idmclone');
     loadSettings();
     const saved = readJSON(F('downloads.json'), []);
     for (const o of Array.isArray(saved) ? saved : []) {
